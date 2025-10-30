@@ -1,0 +1,52 @@
+#Change user passwords
+Command: Sudo passwd <username>
+ - /etc/passwd
+    - UIDs => 1000
+    - /bin/bash
+    - /home/<username>
+        - Ex: user1:x:1001:1001::/home/user1:/bin/bash
+    - root
+        - Ex: root:x:0:0:Super User:/root:/bin/bash
+
+#Check who's logged in
+Command: Who -u
+
+#Manage Password:
+    #Kill session
+    Command: Sudo pkill -u <username>
+
+    #Lock Account (! in second field)
+    sudo usermod -L <username>
+        -Ex: user2:!:19735:0:99999:7:::
+
+    #Unlock Account
+    sudo usermod -U <username>
+
+    #Force password reset on next login
+    sudo chage -d 0 <username>
+
+    #View password aging info
+    sudo chage -l <username>
+
+
+#user passwords
+/etc/shadow
+    - Ex: user1:$6$KzPqv7Tq$5ujYlZ8v...4ghZb7/:19735:0:99999:7:::
+        - Field 1: Username
+            -user1
+        - Field 2: Password hash
+            -$6$KzPqv7Tq$5ujYlZ8v...
+                -Beginning Prefix meanings:
+                    -$1$ = MD5 (weak)
+                    -$5$ = SHA-256 
+                    -$6$ = SHA-512
+                    -$y$ = yescrypt (Fedora 37+ default)
+        - Field 3: Last password change (days since Jan 1 1970)
+            -19735
+        - Field 4: Min days before password can be changed
+            -0
+        - Field 5: Max days password is valid
+            -99999
+        - Field 6: Days before expiration to warn user
+            -7
+        - Field 7-9: Optional account disable fields
