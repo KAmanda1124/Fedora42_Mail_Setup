@@ -1,0 +1,95 @@
+#!/bin/bash
+# Ensures only root has UID 0 or sudo/root-level privileges
+# Checks for users in /etc/sudoers or /etc/sudoers.d/
+# Changes logged to /root/user_privilege_audit_<timestamp>/
+
+TS=$(date +%F_%H%M%S)
+LOGDIR="/root/user_privilege_audit_${TS}"
+mkdir -p "$LOGDIR"
+LOGFILE="${LOGDIR}/changes.log"
+
+echo "==============================================="
+echo "         USER PRIVILEGE AUDIT & REVERT         "
+echo "         Log directory: $LOGDIR"
+echo "==============================================="
+echo
+
+
+# Function to log and print messages
+log() {
+  echo -e "$1"
+  echo -e "$1" >> "$LOGFILE"
+}
+
+S=$(date +%F_%H%M%S)
+LOGDIR="/root/user_privilege_audit_${TS}"
+mkdir -p "$LOGDIR"
+LOGFILE="${LOGDIR}/changes.log"
+
+log() {
+  echo "$1"
+  echo "$1" >> "$LOGFILE"
+}
+
+echo "Starting user privilege audit"
+echo "Log directory: $LOGDIR"
+echo
+
+# Step 1: Detect users with UID 0
+log "Checking for users with UID 0 (root privileges)"
+awk -F: '$3 == 0 {print $1 ":" $7}' /etc/passwd > "${LOGDIR}/uid0_users.txt"
+
+mapfile -t uid0_users < <(awk -F: '$3 == 0 {print $1}' /etc/passwd)
+
+for user in "${uid0_users[@]}"; do
+  if [ "$user" != "root" ]; then
+    log "Found non-root user with UID 0: $user"
+
+    backup="/etc/passwd.bak_${user}_${TS}"
+    cp -a /etc/passwd "$backup"
+    log "Backed up /etc/passwd to $backup"
+
+    new_uid=$(awk -F: '$3>=1000 && $3<65534 {max=$3} END {print max+1}' /etc/passwd)
+    usermod -u "$new_uid" "$user"
+    log "Changed UID for $user to $new_uid"
+  fi
+done
+
+# Step 2: Check /etc/sudoers for unauthorized entries
+log
+log "Checking /etc/sudoers for unauthorized sudo access"
+grep -E '^[^#].*(ALL|NOPASSWD)' /etc/sudoers > "${LOGDIR}/sudoers_findings.txt" || true
+
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  if ! echo "$line" | grep -qE '^root'; then
+    log "Unauthorized sudoers line detected: $line"
+
+    cp -a /etc/sudoers "${LOGDIR}/sudoers_backup_${TS}"
+    sed -i "s|^${line}|# auto-commented: ${line}|g" /etc/sudoers
+    log "Commented out unauthorized sudoers line"
+  fi
+done < "${LOGDIR}/sudoers_findings.txt"
+
+# Step 3: Check /etc/sudoers.d for privilege files
+log
+log "Checking /etc/sudoers.d for unauthorized entries"
+for f in /etc/sudoers.d/*; do
+  [ -f "$f" ] || continue
+  if grep -qE '^[^#].*(ALL|NOPASSWD)' "$f"; then
+    log "Unauthorized sudo privileges in file: $f"
+    cp -a "$f" "${LOGDIR}/"
+    sed -i 's|^\([^#].*\)|# auto-commented: \1|g' "$f"
+    log "Commented out unauthorized lines in $f"
+  fi
+done
+
+# Step 4: Summary
+log
+log "Privilege audit complete"
+log "Users with UID 0 after cleanup:"
+awk -F: '$3 == 0 {print " - " $1}' /etc/passwd >> "$LOGFILE"
+awk -F: '$3 == 0 {print " - " $1}'
+
+echo
+echo "Completed. Detailed logs saved in $LOGDIR"
