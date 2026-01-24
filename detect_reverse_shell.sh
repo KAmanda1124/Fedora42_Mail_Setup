@@ -1,5 +1,4 @@
 !# /bin/bash
-
 # Checks for any potential reverse shells
 
 echo " Checking for suspicious reverse shell activity..."
